@@ -3,7 +3,7 @@ const express = require('express');
 require('dotenv').config();
 
 const token = process.env.BOT_TOKEN;
-const ADMIN_ID = 8017590244; // מזהה האדמין הראשי שלך
+const ADMIN_ID = 8017590244; // מזהה האדמין הראשי
 
 if (!token) {
   console.error("❌ BOT_TOKEN is missing in environment variables!");
@@ -14,17 +14,17 @@ const bot = new Telegraf(token);
 const app = express();
 app.use(express.json());
 
-// --- מסד נתונים בזיכרון ---
+// --- מסד נתונים בזיכרון (ניתן לחבר ל-Supabase/MongoDB בהמשך) ---
 const db = {
-  users: {},      
-  channels: [],   
-  orders: {},     
+  users: {},      // { userId: { credits, completedCount, sponsorCompleted, state: null } }
+  channels: [],   // [ { id, name, link, usernameOrId, ownerId, active } ]
+  orders: {},     // { orderCode: { userId, creditsSpent, subsCount, status, date } }
   settings: {
     sponsorChannel: process.env.SPONSOR_CHANNEL || '@your_sponsor_channel'
   }
 };
 
-// --- אימוג'י פרימיום להודעות בתוך הצ'אט ---
+// --- אימוג'י פרימיום לגוף ההודעות בלבד ---
 const E = {
   flash: '<tg-emoji emoji-id="5780782082108167841">⚡</tg-emoji>',
   diamond: '<tg-emoji emoji-id="5271998448042785916">💎</tg-emoji>',
@@ -40,7 +40,7 @@ const E = {
 const isAdmin = (ctx) => ctx.from && ctx.from.id === ADMIN_ID;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// --- מקלדת ראשית מתוקנת (משתמשת באימוג'י רגילים למניעת שגיאות תצוגה) ---
+// --- מקלדת תפריט ראשית (עם אימוג'י רגילים לתצוגה נקייה) ---
 const getMainMenuKeyboard = (userId) => {
   const buttons = [
     [`💎 הרווח קרדיטים חינם`, `⚡ MemberFlow | הוספת מנויים`],
@@ -52,7 +52,9 @@ const getMainMenuKeyboard = (userId) => {
   return Markup.keyboard(buttons).resize();
 };
 
-// --- פקודת התחלה (/start) ---
+// ==========================================
+//              פקודת התחלה (/start)
+// ==========================================
 bot.start(async (ctx) => {
   const userId = ctx.from.id;
   const firstName = ctx.from.first_name || 'משתמש יקר';
@@ -60,12 +62,13 @@ bot.start(async (ctx) => {
 
   if (!db.users[userId]) {
     db.users[userId] = {
-      credits: 10,
+      credits: 10, // בונוס הצטרפות התחלתי
       completedCount: 0,
       sponsorCompleted: false,
       state: null
     };
 
+    // שליחת כרטיס משתמש חדש לאדמין
     try {
       await bot.telegram.sendMessage(
         ADMIN_ID,
@@ -100,23 +103,25 @@ bot.hears('💎 הרווח קרדיטים חינם', async (ctx) => {
   const userId = ctx.from.id;
   const user = db.users[userId] || (db.users[userId] = { credits: 10, completedCount: 0, sponsorCompleted: false });
 
+  // בדיקת משימת חובה כל 5 פעולות
   if (user.completedCount > 0 && user.completedCount % 5 === 0 && !user.sponsorCompleted) {
     return ctx.replyWithHTML(
       `<b>${E.confirm} אימות ביטחון תקופתי (חובה)</b> ${E.flash}\n\n` +
       `ביצעת <b>${user.completedCount}</b> פעולות בהצלחה! כדי להמשיך להרוויח, עליך להצטרף לערוץ הרשמי של המערכת.\n\n` +
       `🎁 תגמול אימות: <b>1 ${E.diamond}</b> מתנה ${E.next}`,
       Markup.inlineKeyboard([
-        [Markup.button.url(`${E.flash} הצטרף לערוץ הרשמי`, `https://t.me/${db.settings.sponsorChannel.replace('@','')}`)],
-        [Markup.button.callback(`${E.check} אמת הצטרפות וקבל קרדיט`, 'verify_sponsor')]
+        [Markup.button.url('⚡ הצטרף לערוץ הרשמי', `https://t.me/${db.settings.sponsorChannel.replace('@','')}`)],
+        [Markup.button.callback('✅ אמת הצטרפות וקבל קרדיט', 'verify_sponsor')]
       ])
     );
   }
 
+  // שליפת קלפי ערוצים זמינים
   const availableChannels = db.channels.filter(c => c.active && c.ownerId !== userId);
   if (availableChannels.length === 0) {
     return ctx.replyWithHTML(
-      `⚠️ <b>אין כרגע קלפי חשיפה זמינים.</b>\n` +
-      `אנא חזור מאוחר יותר أو פרסם ערוץ משלך דרך התפריט!`
+      `⚠️ <b>אין כרגע קלפי חשיפה זמינים במאגר.</b>\n` +
+      `אנא חזור מאוחר יותר או פרסם ערוץ משלך דרך התפריט!`
     );
   }
 
@@ -130,10 +135,11 @@ bot.hears('💎 הרווח קרדיטים חינם', async (ctx) => {
 
   await ctx.replyWithHTML(cardText, Markup.inlineKeyboard([
     [Markup.button.url('🔗 מעבר לערוץ המבוקש', targetChannel.link)],
-    [Markup.button.callback(`קבל 3 ${E.diamond}`, `claim_${targetChannel.id}`)]
+    [Markup.button.callback(`קבל 3 קרדיטים 💎`, `claim_${targetChannel.id}`)]
   ]));
 });
 
+// אימות בלייב + דימוי טעינה + עריכת הודעה
 bot.action(/^claim_(.+)$/, async (ctx) => {
   const channelId = ctx.match[1];
   const userId = ctx.from.id;
@@ -144,11 +150,13 @@ bot.action(/^claim_(.+)$/, async (ctx) => {
   }
 
   try {
+    // דימוי טעינה וחשיבה בלייב
     await ctx.editMessageText(`⌛ <b>בודק חברות בערוץ...</b>`, { parse_mode: 'HTML' });
     await sleep(800);
     await ctx.editMessageText(`🔄 <b>מאמת נתונים מול שרתי טלגרם...</b>`, { parse_mode: 'HTML' });
     await sleep(800);
 
+    // בדיקת חברות אמיתית בטלגרם
     const chatMember = await bot.telegram.getChatMember(channel.usernameOrId, userId);
     const isMember = ['member', 'creator', 'administrator'].includes(chatMember.status);
 
@@ -161,13 +169,14 @@ bot.action(/^claim_(.+)$/, async (ctx) => {
           parse_mode: 'HTML',
           ...Markup.inlineKeyboard([
             [Markup.button.url('🔗 מעבר לערוץ', channel.link)],
-            [Markup.button.callback(`נסה לאמת שוב ${E.flash}`, `claim_${channel.id}`)]
+            [Markup.button.callback(`נסה לאמת שוב ⚡`, `claim_${channel.id}`)]
           ])
         }
       );
       return;
     }
 
+    // הוספת קרדיטים
     db.users[userId].credits += 3;
     db.users[userId].completedCount += 1;
     db.users[userId].sponsorCompleted = false;
@@ -179,7 +188,7 @@ bot.action(/^claim_(.+)$/, async (ctx) => {
       {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback(`המשך לקלף הבא ${E.next}`, 'next_card')]
+          [Markup.button.callback(`המשך לקלף הבא ▶️`, 'next_card')]
         ])
       }
     );
@@ -193,6 +202,7 @@ bot.action(/^claim_(.+)$/, async (ctx) => {
   }
 });
 
+// אימות ערוץ הספונסר (ערוץ הבית)
 bot.action('verify_sponsor', async (ctx) => {
   const userId = ctx.from.id;
   try {
@@ -209,7 +219,7 @@ bot.action('verify_sponsor', async (ctx) => {
         `קיבלת <b>1 ${E.diamond}</b> במתנה. תוכל להמשיך להרוויח קרדיטים בחופשיות!`,
         {
           parse_mode: 'HTML',
-          ...Markup.inlineKeyboard([[Markup.button.callback(`המשך ${E.next}`, 'next_card')]])
+          ...Markup.inlineKeyboard([[Markup.button.callback(`המשך ▶️`, 'next_card')]])
         }
       );
     } else {
@@ -247,6 +257,7 @@ bot.hears('⚡ MemberFlow | הוספת מנויים', async (ctx) => {
   );
 });
 
+// קליטת הודעות טקסט (יצירת קלף + תשובות אדמין)
 bot.on('text', async (ctx, next) => {
   const userId = ctx.from.id;
   const user = db.users[userId];
@@ -281,7 +292,7 @@ bot.on('text', async (ctx, next) => {
       `• קישור: ${link}\n\n` +
       `מאשר להוסיף את הקלף למערכת הרשמית? ${E.confirm}`,
       Markup.inlineKeyboard([
-        [Markup.button.callback(`${E.check} אישור והוספה`, `approve_card_${cardId}`)],
+        [Markup.button.callback('✅ אישור והוספה', `approve_card_${cardId}`)],
         [Markup.button.callback('❌ ביטול', 'cancel_card')]
       ])
     );
@@ -320,6 +331,11 @@ bot.on('text', async (ctx, next) => {
   return next();
 });
 
+bot.action('cancel_card', async (ctx) => {
+  await ctx.editMessageText('❌ יצירת הקלף בוטלה.');
+});
+
+// אישור קלף והשקעת קרדיטים
 bot.action(/^approve_card_(.+)$/, async (ctx) => {
   const cardId = ctx.match[1];
   
@@ -329,9 +345,9 @@ bot.action(/^approve_card_(.+)$/, async (ctx) => {
     `<i>(יחס המרה: 30 קרדיטים = 10 מנויים)</i>`,
     Markup.inlineKeyboard([
       [
-        Markup.button.callback(`0 קרדיטים`, `add_credits_${cardId}_0`),
-        Markup.button.callback(`30 קרדיטים (10 מנויים)`, `add_credits_${cardId}_30`),
-        Markup.button.callback(`60 קרדיטים (20 מנויים)`, `add_credits_${cardId}_60`)
+        Markup.button.callback('0 קרדיטים', `add_credits_${cardId}_0`),
+        Markup.button.callback('30 קרדיטים (10 מנויים)', `add_credits_${cardId}_30`),
+        Markup.button.callback('60 קרדיטים (20 מנויים)', `add_credits_${cardId}_60`)
       ]
     ])
   );
@@ -376,7 +392,7 @@ bot.hears('📊 ההזמנות שלי', async (ctx) => {
   const userOrders = Object.entries(db.orders).filter(([code, order]) => order.userId == userId);
 
   if (userOrders.length === 0) {
-    return ctx.replyWithHTML(`📋 <b>אין לך הזמנות פעילות כרגע.</b>`);
+    return ctx.replyWithHTML(`📋 <b>אין לך הזמנות פעילות כרגע במערכת.</b>`);
   }
 
   let text = `📊 <b>ההזמנות שלך במערכת MemberFlow:</b> ${E.flash}\n\n`;
@@ -400,7 +416,7 @@ bot.hears('❓ עזרה והסברים', async (ctx) => {
 });
 
 // ==========================================
-//       פאנל ניהול אדמין
+//       פאנל ניהול אדמין (8017590244 בלבד)
 // ==========================================
 bot.hears('⚙️ פאנל ניהול אדמין', async (ctx) => {
   if (!isAdmin(ctx)) return;
