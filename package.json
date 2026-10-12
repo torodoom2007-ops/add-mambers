@@ -1,0 +1,17 @@
+{
+  "name": "memberflow-telegram-bot",
+  "version": "1.0.0",
+  "description": "Professional Telegram Exposure and Member Management Bot - MemberFlow",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "telegraf": "^4.16.3"
+  }
+}
