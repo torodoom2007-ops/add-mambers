@@ -14,17 +14,17 @@ const bot = new Telegraf(token);
 const app = express();
 app.use(express.json());
 
-// --- מסד נתונים בזיכרון (ניתן להחליף ב-MongoDB/Supabase בעתיד) ---
+// --- מסד נתונים בזיכרון ---
 const db = {
-  users: {},      // { userId: { credits, completedCount, sponsorCompleted, state: null } }
-  channels: [],   // [ { id, name, link, usernameOrId, ownerId, active } ]
-  orders: {},     // { orderCode: { userId, creditsSpent, subsCount, status, date } }
+  users: {},      
+  channels: [],   
+  orders: {},     
   settings: {
     sponsorChannel: process.env.SPONSOR_CHANNEL || '@your_sponsor_channel'
   }
 };
 
-// --- אימוג'י פרימיום רשמיים בהתאמה אישית ---
+// --- אימוג'י פרימיום להודעות בתוך הצ'אט ---
 const E = {
   flash: '<tg-emoji emoji-id="5780782082108167841">⚡</tg-emoji>',
   diamond: '<tg-emoji emoji-id="5271998448042785916">💎</tg-emoji>',
@@ -37,20 +37,17 @@ const E = {
   userCard: '🪪'
 };
 
-// --- עזר: בדיקת אדמין ---
 const isAdmin = (ctx) => ctx.from && ctx.from.id === ADMIN_ID;
-
-// --- עזר: סימולציית טעינה וחשיבה (פונקציית השהייה) ---
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// --- מקלדת ראשית מותאמת אישית ---
+// --- מקלדת ראשית מתוקנת (משתמשת באימוג'י רגילים למניעת שגיאות תצוגה) ---
 const getMainMenuKeyboard = (userId) => {
   const buttons = [
-    [`${E.diamond} הרווח קרדיטים חינם`, `${E.flash} MemberFlow | הוספת מנויים`],
-    [`${E.orders} ההזמנות שלי`, `❓ עזרה והסברים`]
+    [`💎 הרווח קרדיטים חינם`, `⚡ MemberFlow | הוספת מנויים`],
+    [`📊 ההזמנות שלי`, `❓ עזרה והסברים`]
   ];
   if (userId === ADMIN_ID) {
-    buttons.push([`${E.admin} פאנל ניהול אדמין ${E.flash}`]);
+    buttons.push([`⚙️ פאנל ניהול אדמין`]);
   }
   return Markup.keyboard(buttons).resize();
 };
@@ -63,13 +60,12 @@ bot.start(async (ctx) => {
 
   if (!db.users[userId]) {
     db.users[userId] = {
-      credits: 10, // בונוס הצטרפות
+      credits: 10,
       completedCount: 0,
       sponsorCompleted: false,
       state: null
     };
 
-    // שליחת כרטיס משתמש חדש לאדמין
     try {
       await bot.telegram.sendMessage(
         ADMIN_ID,
@@ -100,11 +96,10 @@ bot.start(async (ctx) => {
 // ==========================================
 //           רווח קרדיטים חינם
 // ==========================================
-bot.hears(new RegExp(`${E.diamond} הרווח קרדיטים חינם`), async (ctx) => {
+bot.hears('💎 הרווח קרדיטים חינם', async (ctx) => {
   const userId = ctx.from.id;
   const user = db.users[userId] || (db.users[userId] = { credits: 10, completedCount: 0, sponsorCompleted: false });
 
-  // בדיקת חובת ערוץ בית כל 5 קלפים
   if (user.completedCount > 0 && user.completedCount % 5 === 0 && !user.sponsorCompleted) {
     return ctx.replyWithHTML(
       `<b>${E.confirm} אימות ביטחון תקופתי (חובה)</b> ${E.flash}\n\n` +
@@ -117,12 +112,11 @@ bot.hears(new RegExp(`${E.diamond} הרווח קרדיטים חינם`), async (
     );
   }
 
-  // שליפת ערוצים זמינים
   const availableChannels = db.channels.filter(c => c.active && c.ownerId !== userId);
   if (availableChannels.length === 0) {
     return ctx.replyWithHTML(
       `⚠️ <b>אין כרגע קלפי חשיפה זמינים.</b>\n` +
-      `אנא חזור מאוחר יותר או פרסם ערוץ משלך דרך התפריט!`
+      `אנא חזור מאוחר יותר أو פרסם ערוץ משלך דרך התפריט!`
     );
   }
 
@@ -140,7 +134,6 @@ bot.hears(new RegExp(`${E.diamond} הרווח קרדיטים חינם`), async (
   ]));
 });
 
-// אימות הצטרפות עם דימוי טעינה ועריכת הודעה
 bot.action(/^claim_(.+)$/, async (ctx) => {
   const channelId = ctx.match[1];
   const userId = ctx.from.id;
@@ -150,14 +143,12 @@ bot.action(/^claim_(.+)$/, async (ctx) => {
     return ctx.answerCbQuery('⚠️ קלף זה כבר אינו זמין.', { show_alert: true });
   }
 
-  // שלב 1: דימוי טעינה בלייב
   try {
     await ctx.editMessageText(`⌛ <b>בודק חברות בערוץ...</b>`, { parse_mode: 'HTML' });
     await sleep(800);
     await ctx.editMessageText(`🔄 <b>מאמת נתונים מול שרתי טלגרם...</b>`, { parse_mode: 'HTML' });
     await sleep(800);
 
-    // שלב 2: אימות בפועל מול טלגרם
     const chatMember = await bot.telegram.getChatMember(channel.usernameOrId, userId);
     const isMember = ['member', 'creator', 'administrator'].includes(chatMember.status);
 
@@ -177,10 +168,9 @@ bot.action(/^claim_(.+)$/, async (ctx) => {
       return;
     }
 
-    // הצלחה - עדכון נתונים
     db.users[userId].credits += 3;
     db.users[userId].completedCount += 1;
-    db.users[userId].sponsorCompleted = false; // איפוס לקראת המדרגה הבאה
+    db.users[userId].sponsorCompleted = false;
 
     await ctx.editMessageText(
       `${E.check} <b>הפעולה אושרה בהצלחה!</b> ${E.flash}\n\n` +
@@ -203,7 +193,6 @@ bot.action(/^claim_(.+)$/, async (ctx) => {
   }
 });
 
-// אימות ערוץ הספונסר
 bot.action('verify_sponsor', async (ctx) => {
   const userId = ctx.from.id;
   try {
@@ -241,29 +230,27 @@ bot.action('verify_sponsor', async (ctx) => {
 
 bot.action('next_card', async (ctx) => {
   await ctx.deleteMessage();
-  ctx.emit('hears', `${E.diamond} הרווח קרדיטים חינם`, ctx);
+  ctx.emit('hears', '💎 הרווח קרדיטים חינם', ctx);
 });
 
 // ==========================================
 //     הוספת מנויים / פרסום ערוץ
 // ==========================================
-bot.hears(new RegExp(`${E.flash} MemberFlow \\| הוספת מנויים`), async (ctx) => {
+bot.hears('⚡ MemberFlow | הוספת מנויים', async (ctx) => {
   const userId = ctx.from.id;
   db.users[userId].state = 'WAITING_FOR_CHANNEL_INFO';
 
   await ctx.replyWithHTML(
     `🪪 <b>יצירת קלף משתמש לקידום וחשיפה ${E.flash}</b>\n\n` +
-    `כדי להוסיף את הערוץ/קבוצה שלך למאגר, שלח כעת את **השם והקישור הישיר** בפורמט הבא:\n\n` +
+    `כדי להוסיף את הערוץ/קבוצה שלך למאגר, שלח כעת את <b>השם והקישור הישיר</b> בפורמט הבא:\n\n` +
     `<code>שם הערוץ | https://t.me/your_channel</code>`
   );
 });
 
-// קליטת טקסט ליצירת קלף
 bot.on('text', async (ctx, next) => {
   const userId = ctx.from.id;
   const user = db.users[userId];
 
-  // קליטת פרטי ערוץ
   if (user && user.state === 'WAITING_FOR_CHANNEL_INFO') {
     const text = ctx.message.text.trim();
     const parts = text.split('|');
@@ -286,7 +273,7 @@ bot.on('text', async (ctx, next) => {
       active: true
     });
 
-    user.state = null; // איפוס סטייט
+    user.state = null;
 
     return ctx.replyWithHTML(
       `🪪 <b>תצוגה מקדימה לקלף הקידום שלך:</b>\n\n` +
@@ -300,8 +287,7 @@ bot.on('text', async (ctx, next) => {
     );
   }
 
-  // קליטת פקודות אדמין (מידע מיוחד)
-  if (userId === ADMIN_ID && user.state === 'WAITING_FOR_BROADCAST') {
+  if (userId === ADMIN_ID && user && user.state === 'WAITING_FOR_BROADCAST') {
     user.state = null;
     const msg = ctx.message.text;
     let count = 0;
@@ -314,7 +300,7 @@ bot.on('text', async (ctx, next) => {
     return ctx.replyWithHTML(`${E.check} ההודעה נשלחה בהצלחה ל-<b>${count}</b> משתמשים!`);
   }
 
-  if (userId === ADMIN_ID && user.state === 'WAITING_FOR_CREDIT_SET') {
+  if (userId === ADMIN_ID && user && user.state === 'WAITING_FOR_CREDIT_SET') {
     user.state = null;
     const [targetId, amount] = ctx.message.text.split(' ');
     if (db.users[targetId]) {
@@ -325,7 +311,7 @@ bot.on('text', async (ctx, next) => {
     }
   }
 
-  if (userId === ADMIN_ID && user.state === 'WAITING_FOR_SPONSOR_SET') {
+  if (userId === ADMIN_ID && user && user.state === 'WAITING_FOR_SPONSOR_SET') {
     user.state = null;
     db.settings.sponsorChannel = ctx.message.text.trim();
     return ctx.replyWithHTML(`${E.check} ערוץ החובה עודכן ל-<b>${db.settings.sponsorChannel}</b>`);
@@ -334,19 +320,18 @@ bot.on('text', async (ctx, next) => {
   return next();
 });
 
-// אישור קלף והקצאת קרדיטים
 bot.action(/^approve_card_(.+)$/, async (ctx) => {
   const cardId = ctx.match[1];
   
   await ctx.editMessageText(
     `${E.check} <b>הקלף אושר ונוסף למאגר!</b> ${E.flash}\n\n` +
     `בחר כמה קרדיטים להשקיע בקידום הערוץ:\n` +
-    `<i>(ייחס ההמרה: 30 קרדיטים = 10 מנויים)</i>`,
+    `<i>(יחס המרה: 30 קרדיטים = 10 מנויים)</i>`,
     Markup.inlineKeyboard([
       [
-        Markup.button.callback(`0 ${E.diamond}`, `add_credits_${cardId}_0`),
-        Markup.button.callback(`+30 ${E.diamond} (10 מנויים)`, `add_credits_${cardId}_30`),
-        Markup.button.callback(`+60 ${E.diamond} (20 מנויים)`, `add_credits_${cardId}_60`)
+        Markup.button.callback(`0 קרדיטים`, `add_credits_${cardId}_0`),
+        Markup.button.callback(`30 קרדיטים (10 מנויים)`, `add_credits_${cardId}_30`),
+        Markup.button.callback(`60 קרדיטים (20 מנויים)`, `add_credits_${cardId}_60`)
       ]
     ])
   );
@@ -386,7 +371,7 @@ bot.action(/^add_credits_(.+)_(.+)$/, async (ctx) => {
 // ==========================================
 //              ההזמנות שלי
 // ==========================================
-bot.hears(new RegExp(`${E.orders} ההזמנות שלי`), async (ctx) => {
+bot.hears('📊 ההזמנות שלי', async (ctx) => {
   const userId = ctx.from.id;
   const userOrders = Object.entries(db.orders).filter(([code, order]) => order.userId == userId);
 
@@ -415,9 +400,9 @@ bot.hears('❓ עזרה והסברים', async (ctx) => {
 });
 
 // ==========================================
-//       פאנל ניהול אדמין (8017590244 בלבד)
+//       פאנל ניהול אדמין
 // ==========================================
-bot.hears(new RegExp(`${E.admin} פאנל ניהול אדמין`), async (ctx) => {
+bot.hears('⚙️ פאנל ניהול אדמין', async (ctx) => {
   if (!isAdmin(ctx)) return;
 
   const totalUsers = Object.keys(db.users).length;
@@ -435,13 +420,12 @@ bot.hears(new RegExp(`${E.admin} פאנל ניהול אדמין`), async (ctx) =
 
   await ctx.replyWithHTML(adminText, Markup.inlineKeyboard([
     [Markup.button.callback('📢 שליחת הודעה מערכתית (Broadcast)', 'admin_broadcast')],
-    [Markup.button.callback(`${E.diamond} ניהול קרדיטים למשתמש`, 'admin_set_credits')],
-    [Markup.button.callback(`${E.confirm} הגדרת ערוץ חובה (Sponsor)`, 'admin_set_sponsor')],
+    [Markup.button.callback('💎 ניהול קרדיטים למשתמש', 'admin_set_credits')],
+    [Markup.button.callback('🛡️ הגדרת ערוץ חובה (Sponsor)', 'admin_set_sponsor')],
     [Markup.button.callback('🗑️ הסרת ערוצים מפרים', 'admin_clean_channels')]
   ]));
 });
 
-// פעולות אדמין
 bot.action('admin_broadcast', async (ctx) => {
   if (!isAdmin(ctx)) return;
   db.users[ADMIN_ID].state = 'WAITING_FOR_BROADCAST';
