@@ -1,17 +1,20 @@
 {
-  "name": "memberflow-telegram-bot",
-  "version": "1.0.0",
-  "description": "Professional Telegram Exposure and Member Management Bot - MemberFlow",
-  "main": "index.js",
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "name": "memberflow-bot",
+  "version": "0.2.0",
+  "description": "MemberFlow — Telegram bot for channel growth & credit system",
+  "main": "memberflow-bot-0.2.0.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node memberflow-bot-0.2.0.js",
+    "dev": "node memberflow-bot-0.2.0.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
+    "express": "^4.21.0",
     "telegraf": "^4.16.3"
-  }
+  },
+  "keywords": ["telegram", "bot", "memberflow"],
+  "license": "MIT"
 }
