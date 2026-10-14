@@ -541,6 +541,55 @@ bot.on('text', async (ctx, next) => {
 });
 
 // ==========================================
+// אישור או דחיית קלפים על ידי אדמין
+// ==========================================
+bot.action(/^admin_approve_card_(\d+)$/, async (ctx) => {
+  if (!isAdmin(ctx)) return ctx.answerCbQuery('אין הרשאה', { show_alert: true });
+  await ctx.answerCbQuery().catch(() => {});
+  const cardId = Number(ctx.match[1]);
+  const card = db.channels.find((c) => c.id === cardId);
+  if (!card) return ctx.editMessageText('❌ הקלף לא נמצא.');
+
+  card.approved = true;
+  saveDb();
+
+  // שליחת הודעה למשתמש שההזמנה אושרה בהצלחה
+  sendTo(
+    card.ownerId,
+    `🎉 <b>ההזמנה שלך אושרה!</b>\n\n` +
+    `${E.sub} הערוץ <b>${escapeHtml(card.name)}</b> התקבל במערכת בהצלחה ומנויים יתחילו להתווסף בקרוב ${E.flash}`
+  ).catch(() => {});
+
+  await ctx.editMessageText(`✅ <b>הקלף #${card.id} (${escapeHtml(card.name)}) אושר בהצלחה!</b>\nהודעה נשלחה למשתמש.`, { parse_mode: 'HTML' });
+});
+
+bot.action(/^admin_reject_card_(\d+)$/, async (ctx) => {
+  if (!isAdmin(ctx)) return ctx.answerCbQuery('אין הרשאה', { show_alert: true });
+  await ctx.answerCbQuery().catch(() => {});
+  const cardId = Number(ctx.match[1]);
+  const cardIndex = db.channels.findIndex((c) => c.id === cardId);
+  if (cardIndex === -1) return ctx.editMessageText('❌ הקלף לא נמצא.');
+
+  const card = db.channels[cardIndex];
+  db.channels.splice(cardIndex, 1); // הסרת הקלף מהמערכת
+  saveDb();
+
+  // הודעה למשתמש על דחייה
+  sendTo(
+    card.ownerId,
+    `❌ <b>ההזמנה שלך לערוץ "${escapeHtml(card.name)}" נדחתה על ידי ההנהלה.</b>\nלפרטים נוספים ניתן לפנות לתמיכה הטכנית.`
+  ).catch(() => {});
+
+  await ctx.editMessageText(`❌ <b>הקלף #${cardId} נדחה והוסר מהמערכת.</b>`, { parse_mode: 'HTML' });
+});
+  const user = db.users[ctx.from.id];
+  const h = states[user.state];
+  if (h) return h(ctx, user, ctx.message.text.trim());
+  if (user.liveTicket) return supportMessage(ctx, user, 'reply', user.liveTicket);
+  return next();
+});
+
+// ==========================================
 //          תמיכה טכנית (פניות)
 // ==========================================
 async function supportMessage(ctx, user, kind, ticketId) {
