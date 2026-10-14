@@ -377,30 +377,38 @@ const states = {
         verified = ['administrator', 'creator'].includes(bm.status);
       } catch (e) { /* not verifiable */ }
     }
-    if (!verified && S().requireBotAdmin) {
-      return html(ctx, `❌ <b>נדרש להוסיף את הבוט כאדמין בערוץ</b> (ערוץ ציבורי בלבד) ואז לשלוח שוב.`);
-    }
 
     let card = dup;
-    if (card) { card.name = name; card.verified = verified; card.chatRef = chatRef; }
-    else {
+    if (card) { 
+      card.name = name; 
+      card.verified = verified; 
+      card.chatRef = chatRef; 
+      card.approved = false; // ממתין לאישור מחדש
+    } else {
       card = { id: db.counters.channel++, name, link, chatRef, ownerId: user.id, approved: false, disabled: false, verified, gained: 0, createdAt: Date.now() };
       db.channels.push(card);
     }
     user.state = null;
+    saveDb();
+
+    // שליחת התראה לאדמינים לאישור הקלף
+    await notifyAdmins(
+      `🪪 <b>קלף/הזמנה חדשה ממתינה לאישור!</b>\n\n` +
+      `👤 משתמש: ${uLink(user)} (<code>${user.id}</code>)\n` +
+      `📢 ערוץ: <b>${escapeHtml(name)}</b>\n` +
+      `🔗 קישור: ${escapeHtml(link)}\n` +
+      `• אימות: ${verified ? '✅ אוטומטי' : '⚠️ ידני'}`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ אישור קלף', `admin_approve_card_${card.id}`), Markup.button.callback('❌ דחייה', `admin_reject_card_${card.id}`)]
+      ])
+    );
 
     return html(
       ctx,
-      `🪪 <b>תצוגה מקדימה לקלף הקידום שלך:</b>\n\n` +
-      `• שם: <b>${escapeHtml(name)}</b>\n` +
-      `• קישור: ${escapeHtml(link)}\n` +
-      `• מצב אימות: ${verified ? '✅ <b>אימות אוטומטי</b> (קדימות בחשיפה)' : '⚠️ <b>ללא אימות אוטומטי</b>'}\n` +
-      (verified ? '' : `<i>טיפ: הוספת הבוט כאדמין בערוץ מפעילה אימות מלא ומגדילה את החשיפה. לא חובה.</i>\n`) +
-      `\nמאשר להוסיף את הקלף למערכת הרשמית? ${E.confirm}`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback('✅ אישור והוספה', `approve_card_${card.id}`)],
-        [Markup.button.callback('❌ ביטול', `cancel_card_${card.id}`)]
-      ])
+      `⏳ <b>הקלף שלך נקלט בהצלחה ונשלח לבדיקת הנהלה!</b>\n\n` +
+      `• שם הערוץ: <b>${escapeHtml(name)}</b>\n\n` +
+      `ברגע שהמנהל יאשר את ההזמנה, תקבל עידכון והמנויים יתחילו להתווסף בקרוב ${E.flash}`,
+      getMainMenuKeyboard(user.id)
     );
   },
 
