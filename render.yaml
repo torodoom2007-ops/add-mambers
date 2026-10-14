@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: memberflow-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: NODE_VERSION
+        value: "20"
